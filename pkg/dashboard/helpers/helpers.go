@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/fairwindsops/goldilocks/pkg/utils"
 )
 
 func PrintResource(quant resource.Quantity) string {
@@ -29,7 +31,25 @@ func PrintResource(quant resource.Quantity) string {
 	return quant.String()
 }
 
-func GetStatus(existing resource.Quantity, recommendation resource.Quantity, style string) string {
+// comparisonValue rounds a current (deployed) quantity with the same steps the
+// summary uses for recommendations, so that a difference caused purely by
+// display rounding -- current 100M versus a recommendation shown as 96Mi --
+// does not read as "less than". Only the comparison is rounded; callers still
+// display the original value with PrintResource. If the value cannot be rounded
+// (for example it is negative) it is compared as-is.
+func comparisonValue(resourceName corev1.ResourceName, quant resource.Quantity) resource.Quantity {
+	rounded, err := utils.FormatResource(resourceName, quant)
+	if err != nil {
+		return quant
+	}
+	return rounded
+}
+
+// GetStatus compares a current quantity against a recommendation for display.
+// Both sides are compared after rounding the current value with the
+// recommendation's steps; the recommendation passed in is already rounded by
+// the summary, and rounding is idempotent.
+func GetStatus(resourceName corev1.ResourceName, existing resource.Quantity, recommendation resource.Quantity, style string) string {
 	if existing.IsZero() {
 		switch style {
 		case "text":
@@ -41,7 +61,8 @@ func GetStatus(existing resource.Quantity, recommendation resource.Quantity, sty
 		}
 	}
 
-	comparison := existing.Cmp(recommendation)
+	roundedExisting := comparisonValue(resourceName, existing)
+	comparison := roundedExisting.Cmp(comparisonValue(resourceName, recommendation))
 	if comparison == 0 {
 		switch style {
 		case "text":
@@ -75,7 +96,11 @@ func GetStatus(existing resource.Quantity, recommendation resource.Quantity, sty
 	return ""
 }
 
-func GetStatusRange(existing, lower, upper resource.Quantity, style string, resourceType string) string {
+// GetStatusRange compares a current quantity against the recommended lower and
+// upper bounds. As with GetStatus, the current value and both bounds are
+// compared after being rounded with the recommendation steps; the values
+// themselves are displayed unrounded by PrintResource.
+func GetStatusRange(resourceName corev1.ResourceName, existing, lower, upper resource.Quantity, style string, resourceType string) string {
 	if existing.IsZero() {
 		switch style {
 		case "text":
@@ -87,8 +112,9 @@ func GetStatusRange(existing, lower, upper resource.Quantity, style string, reso
 		}
 	}
 
-	comparisonLower := existing.Cmp(lower)
-	comparisonUpper := existing.Cmp(upper)
+	roundedExisting := comparisonValue(resourceName, existing)
+	comparisonLower := roundedExisting.Cmp(comparisonValue(resourceName, lower))
+	comparisonUpper := roundedExisting.Cmp(comparisonValue(resourceName, upper))
 
 	if comparisonLower < 0 {
 		switch style {

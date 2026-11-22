@@ -29,22 +29,53 @@ import (
 
 var updateMode = vpav1.UpdateModeOff
 
-// lowerBound is used for all lower bounds in VPAs with recommendations
+// lowerBound is used for all lower bounds in VPAs with recommendations. The
+// values are deliberately not round numbers so that the summary's rounding is
+// observable: 10500u is 10.5 millicores and 10486784 bytes is 10Mi + 1Ki, so
+// both round up (to 11m and 11Mi respectively).
 var lowerBound = v1.ResourceList{
-	v1.ResourceCPU:    resource.MustParse("10m"),
-	v1.ResourceMemory: resource.MustParse("10Mi"),
+	v1.ResourceCPU:    resource.MustParse("10500u"),
+	v1.ResourceMemory: resource.MustParse("10486784"),
 }
 
-// upperBound is used for all upper bounds in VPAs with recommendations
+// upperBound is used for all upper bounds in VPAs with recommendations.
+// 1500000u rounds up to 1500m and 200M (200000000 bytes) rounds up to 191Mi.
 var upperBound = v1.ResourceList{
-	v1.ResourceCPU:    resource.MustParse("500m"),
-	v1.ResourceMemory: resource.MustParse("500Mi"),
+	v1.ResourceCPU:    resource.MustParse("1500000u"),
+	v1.ResourceMemory: resource.MustParse("200M"),
 }
 
-// targetResources is used for targets, requests, and limits on VPAs and Containers
+// targetResources is used for targets on VPAs with recommendations. 1234567u
+// rounds up to 1235m and 100M (100000000 bytes) rounds up to 96Mi.
 var targetResources = v1.ResourceList{
-	v1.ResourceCPU:    resource.MustParse("100m"),
-	v1.ResourceMemory: resource.MustParse("100Mi"),
+	v1.ResourceCPU:    resource.MustParse("1234567u"),
+	v1.ResourceMemory: resource.MustParse("100M"),
+}
+
+// roundedLowerBound, roundedUpperBound and roundedTarget are what the summary
+// reports for the recommendations above after rounding.
+var roundedLowerBound = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse("11m"),
+	v1.ResourceMemory: resource.MustParse("11Mi"),
+}
+
+var roundedUpperBound = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse("1500m"),
+	v1.ResourceMemory: resource.MustParse("191Mi"),
+}
+
+var roundedTarget = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse("1235m"),
+	v1.ResourceMemory: resource.MustParse("96Mi"),
+}
+
+// currentResources are the requests and limits set on the test workloads. They
+// are not round numbers either, but unlike the recommendations they are
+// reported verbatim in the summary: current configuration must reflect what is
+// actually deployed rather than a rounded approximation of it.
+var currentResources = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse("1500m"),
+	v1.ResourceMemory: resource.MustParse("100M"),
 }
 
 // Basic VPA and Deployment
@@ -193,12 +224,12 @@ var testDeploymentWithRecoUnstructured = &unstructured.Unstructured{
 							"name": "container",
 							"resources": map[string]any{
 								"limits": map[string]any{
-									"cpu":    "100m",
-									"memory": "100Mi",
+									"cpu":    "1500m",
+									"memory": "100M",
 								},
 								"requests": map[string]any{
-									"cpu":    "100m",
-									"memory": "100Mi",
+									"cpu":    "1500m",
+									"memory": "100M",
 								},
 							},
 						},
@@ -268,11 +299,11 @@ var testSummary = Summary{
 					Containers: map[string]ContainerSummary{
 						"container": {
 							ContainerName: "container",
-							LowerBound:    lowerBound,
-							UpperBound:    upperBound,
-							Target:        targetResources,
-							Limits:        targetResources,
-							Requests:      targetResources,
+							LowerBound:    roundedLowerBound,
+							UpperBound:    roundedUpperBound,
+							Target:        roundedTarget,
+							Limits:        currentResources,
+							Requests:      currentResources,
 						},
 					},
 				},
@@ -299,12 +330,12 @@ var testDaemonSettWithRecoUnstructured = &unstructured.Unstructured{
 							"name": "container",
 							"resources": map[string]any{
 								"limits": map[string]any{
-									"cpu":    "100m",
-									"memory": "100Mi",
+									"cpu":    "1500m",
+									"memory": "100M",
 								},
 								"requests": map[string]any{
-									"cpu":    "100m",
-									"memory": "100Mi",
+									"cpu":    "1500m",
+									"memory": "100M",
 								},
 							},
 						},
@@ -379,11 +410,11 @@ var testSummaryDaemonSet = Summary{
 					Containers: map[string]ContainerSummary{
 						"container": {
 							ContainerName: "container",
-							LowerBound:    lowerBound,
-							UpperBound:    upperBound,
-							Target:        targetResources,
-							Limits:        targetResources,
-							Requests:      targetResources,
+							LowerBound:    roundedLowerBound,
+							UpperBound:    roundedUpperBound,
+							Target:        roundedTarget,
+							Limits:        currentResources,
+							Requests:      currentResources,
 						},
 					},
 				},

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -60,6 +61,7 @@ func Test_PrintResource(t *testing.T) {
 
 func Test_GetStatus(t *testing.T) {
 	type args struct {
+		resourceName   corev1.ResourceName
 		existing       resource.Quantity
 		recommendation resource.Quantity
 		style          string
@@ -141,10 +143,44 @@ func Test_GetStatus(t *testing.T) {
 			},
 			want: "error - not set",
 		},
+		{
+			// Current 100M (100000000 bytes) is smaller than the rounded
+			// recommendation 96Mi (100663296 bytes), but both round to the same
+			// displayed value, so the status must be "equal", not "less than".
+			name: "memory within one rounding step counts as equal",
+			args: args{
+				resourceName:   corev1.ResourceMemory,
+				existing:       resource.MustParse("100M"),
+				recommendation: resource.MustParse("96Mi"),
+				style:          "text",
+			},
+			want: "equal",
+		},
+		{
+			// A genuine gap of more than one step is still reported.
+			name: "memory below by more than a rounding step",
+			args: args{
+				resourceName:   corev1.ResourceMemory,
+				existing:       resource.MustParse("48Mi"),
+				recommendation: resource.MustParse("96Mi"),
+				style:          "text",
+			},
+			want: "less than",
+		},
+		{
+			name: "cpu current matches rounded target",
+			args: args{
+				resourceName:   corev1.ResourceCPU,
+				existing:       resource.MustParse("1500m"),
+				recommendation: resource.MustParse("1500m"),
+				style:          "text",
+			},
+			want: "equal",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetStatus(tt.args.existing, tt.args.recommendation, tt.args.style)
+			got := GetStatus(tt.args.resourceName, tt.args.existing, tt.args.recommendation, tt.args.style)
 			assert.Equal(t, got, tt.want)
 		})
 	}
@@ -152,6 +188,7 @@ func Test_GetStatus(t *testing.T) {
 
 func Test_GetStatusRange(t *testing.T) {
 	type args struct {
+		resourceName corev1.ResourceName
 		existing     resource.Quantity
 		lower        resource.Quantity
 		upper        resource.Quantity
@@ -248,7 +285,7 @@ func Test_GetStatusRange(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetStatusRange(tt.args.existing, tt.args.lower, tt.args.upper, tt.args.style, tt.args.resourceType)
+			got := GetStatusRange(tt.args.resourceName, tt.args.existing, tt.args.lower, tt.args.upper, tt.args.style, tt.args.resourceType)
 			assert.Equal(t, got, tt.want)
 		})
 	}

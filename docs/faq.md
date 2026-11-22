@@ -53,6 +53,15 @@ We generate two different QoS classes of recommendation from this
 * For `Guaranteed`, we take the `target` field from the recommendation and set that as both the request and limit for that container
 * For `Burstable`, we set the request as the `lowerBound` and the limit as the `upperBound` from the VPA object
 
+### How are the values rounded?
+
+The recommendations Goldilocks shows (`lowerBound`, `upperBound`, `target`, and `uncappedTarget`) are rounded up so they are easier to read. Rounding never lowers a value.
+
+* CPU is rounded up to a whole millicore. A value that is an exact number of cores is shown as an integer (`2`); everything else is shown in millicores (`1235m`, `2m`, `250m`).
+* Memory is shown in binary units (Ki, Mi, Gi). Values below one Mi are rounded up to a whole Ki; values of one Mi or more are rounded up to a whole Mi. A decimal value such as `100M` therefore becomes `96Mi`.
+
+The container's **current** requests and limits are not rounded: they are reported exactly as deployed, so the dashboard and `goldilocks summary` output reflect what is actually configured.
+
 ## How Accurate is Goldilocks?
 
 This is entirely based on the underlying VPA project. However, in our experience Goldilocks has usually been a good _starting point_ for setting your resource requests and limits. Every environment will be different, and Goldilocks is not a replacement for tuning your applications for your specific use-case.

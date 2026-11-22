@@ -51,9 +51,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatus $cpuRequest $cpuTarget $icon }}"
+            class="compTable__compIcon fas {{ getStatus (resourceName "cpu") $cpuRequest $cpuTarget $icon }}"
           ></i>
-          <span class="visually-hidden">{{ getStatus $cpuRequest $cpuTarget $text }}</span>
+          <span class="visually-hidden">{{ getStatus (resourceName "cpu") $cpuRequest $cpuTarget $text }}</span>
         </td>
         <td>{{ printResource $cpuTarget }}</td>
       </tr>
@@ -64,9 +64,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatus $cpuLimit $cpuTarget $icon }}"
+            class="compTable__compIcon fas {{ getStatus (resourceName "cpu") $cpuLimit $cpuTarget $icon }}"
           ></i>
-          <span class="visually-hidden">{{ getStatus $cpuLimit $cpuTarget $text }}</span>
+          <span class="visually-hidden">{{ getStatus (resourceName "cpu") $cpuLimit $cpuTarget $text }}</span>
         </td>
         <td>{{ printResource $cpuTarget }}</td>
       </tr>
@@ -77,9 +77,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatus $memRequest $memTarget $icon }}"
+            class="compTable__compIcon fas {{ getStatus (resourceName "memory") $memRequest $memTarget $icon }}"
           ></i>
-          <span class="visually-hidden">{{ getStatus $memRequest $memTarget $text }}</span>
+          <span class="visually-hidden">{{ getStatus (resourceName "memory") $memRequest $memTarget $text }}</span>
         </td>
         <td>{{ printResource $memTarget }}</td>
       </tr>
@@ -90,9 +90,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatus $memLimit $memTarget $icon }}"
+            class="compTable__compIcon fas {{ getStatus (resourceName "memory") $memLimit $memTarget $icon }}"
           ></i>
-          <span class="visually-hidden">{{ getStatus $memLimit $memTarget $text }}</span>
+          <span class="visually-hidden">{{ getStatus (resourceName "memory") $memLimit $memTarget $text }}</span>
         </td>
         <td>{{ printResource $memTarget }}</td>
       </tr>
@@ -145,9 +145,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatusRange $cpuRequest $cpuLowerBound $cpuUpperBound $icon $request}}"
+            class="compTable__compIcon fas {{ getStatusRange (resourceName "cpu") $cpuRequest $cpuLowerBound $cpuUpperBound $icon $request}}"
           ></i>
-          <span class="visually-hidden">{{ getStatusRange $cpuRequest $cpuLowerBound $cpuUpperBound $text $request}}</span>
+          <span class="visually-hidden">{{ getStatusRange (resourceName "cpu") $cpuRequest $cpuLowerBound $cpuUpperBound $text $request}}</span>
         </td>
         <td>{{ printResource $cpuLowerBound }}</td>
       </tr>
@@ -158,9 +158,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatusRange $cpuLimit $cpuLowerBound $cpuUpperBound $icon $limit }}"
+            class="compTable__compIcon fas {{ getStatusRange (resourceName "cpu") $cpuLimit $cpuLowerBound $cpuUpperBound $icon $limit }}"
           ></i>
-          <span class="visually-hidden">{{ getStatusRange $cpuLimit $cpuLowerBound $cpuUpperBound $text $limit }}</span>
+          <span class="visually-hidden">{{ getStatusRange (resourceName "cpu") $cpuLimit $cpuLowerBound $cpuUpperBound $text $limit }}</span>
         </td>
         <td>{{ printResource $cpuUpperBound }}</td>
       </tr>
@@ -171,9 +171,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatusRange $memRequest $memLowerBound $memUpperBound $icon $request }}"
+            class="compTable__compIcon fas {{ getStatusRange (resourceName "memory") $memRequest $memLowerBound $memUpperBound $icon $request }}"
           ></i>
-          <span class="visually-hidden">{{ getStatusRange $memRequest $memLowerBound $memUpperBound $text $limit }}</span>
+          <span class="visually-hidden">{{ getStatusRange (resourceName "memory") $memRequest $memLowerBound $memUpperBound $text $limit }}</span>
         </td>
         <td>{{ printResource $memLowerBound }}</td>
       </tr>
@@ -184,9 +184,9 @@
         <td>
           <i
             aria-hidden="true"
-            class="compTable__compIcon fas {{ getStatusRange $memLimit $memLowerBound $memUpperBound $icon $limit }}"
+            class="compTable__compIcon fas {{ getStatusRange (resourceName "memory") $memLimit $memLowerBound $memUpperBound $icon $limit }}"
           ></i>
-          <span class="visually-hidden">{{ getStatusRange $memLimit $memLowerBound $memUpperBound $text $limit }}</span>
+          <span class="visually-hidden">{{ getStatusRange (resourceName "memory") $memLimit $memLowerBound $memUpperBound $text $limit }}</span>
         </td>
         <td>{{ printResource $memUpperBound }}</td>
       </tr>

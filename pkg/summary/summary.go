@@ -16,6 +16,7 @@ package summary
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	controllerUtils "github.com/fairwindsops/controller-utils/pkg/controller"
@@ -74,14 +75,56 @@ type ContainerSummary struct {
 	BurstableCostInt  int
 }
 
+// newContainerSummary builds the summary entry for one container. The VPA's
+// recommendation fields are rounded for display, while the workload's current
+// requests and limits are copied verbatim so the summary reports what is
+// actually deployed rather than a rounded approximation of it.
+//
+// Each value is handled independently and an empty result list stays empty
+// (JSON null) rather than gaining zero entries.
+func newContainerSummary(recommendation vpav1.RecommendedContainerResources, container corev1.Container) (ContainerSummary, error) {
+	cSummary := ContainerSummary{
+		ContainerName: recommendation.ContainerName,
+		Limits:        container.Resources.Limits,
+		Requests:      container.Resources.Requests,
+	}
+
+	recommended := []struct {
+		field string
+		src   corev1.ResourceList
+		dst   *corev1.ResourceList
+	}{
+		{"lowerBound", recommendation.LowerBound, &cSummary.LowerBound},
+		{"upperBound", recommendation.UpperBound, &cSummary.UpperBound},
+		{"target", recommendation.Target, &cSummary.Target},
+		{"uncappedTarget", recommendation.UncappedTarget, &cSummary.UncappedTarget},
+	}
+
+	for _, rec := range recommended {
+		if rec.src == nil {
+			continue
+		}
+		rounded, err := utils.FormatResourceList(rec.src)
+		if err != nil {
+			return ContainerSummary{}, fmt.Errorf("rounding %s for container %s: %w", rec.field, recommendation.ContainerName, err)
+		}
+		*rec.dst = rounded
+	}
+
+	return cSummary, nil
+}
+
 // MatchesRecommendation reports whether this container's current CPU/memory
-// requests and limits are already set to exactly what the VPA recommends
-// (its Target). This is intentionally an exact match (via resource.Quantity's
-// Cmp, not naive string/struct equality) on all four values -- CPU request,
-// CPU limit, memory request, and memory limit -- rather than a fuzzy or
-// tolerance-based comparison. A container that matches on every value is
-// already sized the way the VPA would set it, and incidentally already
-// qualifies for the Guaranteed QoS class.
+// requests and limits equal the rounded recommendation (Target) exactly.
+//
+// Exact match means numeric equality via resource.Quantity.Cmp, not naive
+// string/struct equality. It is deliberately not a tolerance-based comparison:
+// the current values are stored verbatim, while Target is the value rounded for
+// display (CPU to whole millicores, memory to Ki/Mi). So a current value counts
+// as a match only when it is numerically identical to that rounded target --
+// for example current "1000m" matches a rounded target of "1", but current
+// "100000000" (100M) does not match a rounded target of "96Mi" (100663296),
+// even though rounding is why they differ.
 //
 // A value that is unset (the zero Quantity) never counts as a match, even if
 // the corresponding target recommendation also happens to be zero, since an
@@ -231,7 +274,6 @@ func (s Summarizer) GetSummary() (Summary, error) {
 				continue CONTAINER_REC_LOOP
 			}
 
-			var cSummary ContainerSummary
 			workloadPodSpecUnstructured, workloadPodSpecFound, err := unstructured.NestedMap(workload.TopController.UnstructuredContent(), "spec", "template", "spec")
 			if err != nil {
 				klog.Errorf("unable to parse spec.template.spec from unstructured workload. Namespace: '%s', Kind: '%s', Name: '%s'", workload.TopController.GetNamespace(), workload.TopController.GetKind(), workload.TopController.GetName())
@@ -257,14 +299,9 @@ func (s Summarizer) GetSummary() (Summary, error) {
 			for _, c := range workloadPodSpec.Containers {
 				// find the matching container on the workload
 				if c.Name == containerRecommendation.ContainerName {
-					cSummary = ContainerSummary{
-						ContainerName:  containerRecommendation.ContainerName,
-						UpperBound:     utils.FormatResourceList(containerRecommendation.UpperBound),
-						LowerBound:     utils.FormatResourceList(containerRecommendation.LowerBound),
-						Target:         utils.FormatResourceList(containerRecommendation.Target),
-						UncappedTarget: utils.FormatResourceList(containerRecommendation.UncappedTarget),
-						Limits:         utils.FormatResourceList(c.Resources.Limits),
-						Requests:       utils.FormatResourceList(c.Resources.Requests),
+					cSummary, err := newContainerSummary(containerRecommendation, c)
+					if err != nil {
+						return summary, err
 					}
 					klog.V(6).Infof("Resources for %s/%s/%s: Requests: %v Limits: %v", wSummary.ControllerType, wSummary.ControllerName, c.Name, cSummary.Requests, cSummary.Limits)
 					wSummary.Containers[cSummary.ContainerName] = cSummary

@@ -122,6 +122,45 @@ func Test_ContainerSummary_MatchesRecommendation(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			// The summary stores current values verbatim and Target rounded for
+			// display. Current 100M (100000000 bytes) is numerically less than a
+			// rounded target of 96Mi (100663296 bytes), so this is not an exact
+			// match. MatchesRecommendation stays an exact Cmp comparison and does
+			// not start treating them as equal; the dashboard's status helper is
+			// what reports them as "equal" after rounding both sides.
+			name: "current value within a rounding step of the rounded target is not an exact match",
+			requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("100M"),
+			},
+			limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("100M"),
+			},
+			target: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("96Mi"),
+			},
+			want: false,
+		},
+		{
+			// The same current value does match when it equals the rounded target.
+			name: "current value equal to the rounded target matches",
+			requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("96Mi"),
+			},
+			limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("96Mi"),
+			},
+			target: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("96Mi"),
+			},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
