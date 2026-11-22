@@ -1,0 +1,185 @@
+## DO NOT EDIT - Managed by Terraform
+version: 2.1
+
+orbs:
+  rok8s: fairwinds/rok8s-scripts@17.1.1
+  oss-docs: fairwinds/oss-docs@0
+
+references:
+  install_vault_machine: &install_vault_machine
+    run:
+      name: install hashicorp vault
+      command: |
+        sudo apt-get update -y && sudo apt-get install -y curl unzip
+        cd /tmp
+        curl -LO https://releases.hashicorp.com/vault/2.2.1/vault_2.2.1_linux_amd64.zip
+        echo '079435de8ff146bdec4cdbe3be71d672ef4e59e4df6af0f2dba672e71be21a68  vault_2.2.1_linux_amd64.zip' | sha256sum -c
+        unzip -o vault_2.2.1_linux_amd64.zip
+        sudo mv vault /usr/bin/vault
+  setup_qemu_binfmt: &setup_qemu_binfmt
+    run:
+      name: Setup QEMU for multi-arch Docker builds
+      command: |
+        sudo apt-get update -y
+        sudo apt-get install -y qemu-user-static binfmt-support
+        docker buildx create --use || true
+        docker buildx inspect --bootstrap
+  e2e_configuration: &e2e_configuration
+    executor: golang-exec
+    pre_script: e2e/pre.sh
+    script: e2e/run.sh
+    command_runner_image: quay.io/reactiveops/ci-images:v17.1-cimg-24.04
+    enable_docker_layer_caching: true
+    store-test-results: /tmp/test-results
+    attach-workspace: true
+    requires:
+      - test
+      - snapshot
+    filters:
+      branches:
+        only: /.*/
+      tags:
+        ignore: /.*/
+
+executors:
+  golang-exec:
+    docker:
+      - image: cimg/go:1.27.3
+
+jobs:
+  test:
+    docker:
+      - image: cimg/go:1.27.3
+    steps:
+      - checkout
+      - run:
+          name: Go Mod Download
+          command: go mod download && go mod verify
+      - run:
+          name: golangci-lint
+          command: |
+            curl -fsSL -o golangci-lint.tar.gz https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-amd64.tar.gz
+            echo '9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea  golangci-lint.tar.gz' | sha256sum -c
+            tar -xzf golangci-lint.tar.gz
+            mv golangci-lint-2.15.0-linux-amd64/golangci-lint "$(go env GOPATH)/bin/golangci-lint"
+            golangci-lint run --timeout 5m
+      - run:
+          name: test
+          command: |
+            go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+            go vet ./...
+  snapshot:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    steps:
+      - checkout
+      - *setup_qemu_binfmt
+      - run:
+          name: Run GoReleaser snapshot
+          command: |
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$(pwd):/workspace" -w /workspace \
+              -e CIRCLE_SHA1 \
+              -e CIRCLE_BRANCH \
+              -e CIRCLE_TAG \
+              goreleaser/goreleaser:v2.19.0 release --snapshot --skip=sign
+      - run:
+          name: Save snapshot amd64 image for e2e
+          command: |
+            mkdir -p /tmp/workspace/docker_save
+            docker save us-docker.pkg.dev/fairwinds-ops/oss/goldilocks:${CIRCLE_SHA1}-amd64 > /tmp/workspace/docker_save/goldilocks_${CIRCLE_SHA1}-amd64.tar
+      - persist_to_workspace:
+          root: /tmp/workspace/
+          paths:
+            - docker_save
+      - store_artifacts:
+          path: dist
+          destination: snapshot
+  release:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    shell: /bin/bash
+    steps:
+      - checkout
+      - *install_vault_machine
+      - rok8s/get_vault_env:
+          vault_path: repo/global/env
+      - run:
+          name: docker login Google Artifact Registry
+          command: |
+            echo "$GCP_ARTIFACTREADWRITE_JSON_KEY" | base64 -d | docker login -u _json_key --password-stdin us-docker.pkg.dev
+      - *setup_qemu_binfmt
+      - run:
+          name: Run GoReleaser release
+          command: |
+            export GORELEASER_CURRENT_TAG="${CIRCLE_TAG}"
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$(pwd):/workspace" -w /workspace \
+              -v "${HOME}/.docker:/root/.docker" \
+              -e GORELEASER_CURRENT_TAG \
+              -e CIRCLE_TAG \
+              -e CIRCLE_SHA1 \
+              -e GO111MODULE=on \
+              -e GITHUB_TOKEN \
+              -e VAULT_ADDR \
+              -e VAULT_TOKEN \
+              goreleaser/goreleaser:v2.19.0 release
+
+workflows:
+  version: 2
+  test_and_build:
+    jobs:
+      - test:
+          filters:
+            tags:
+              ignore: /.*/
+      - snapshot:
+          requires:
+            - test
+          filters:
+            branches:
+              only: /.*/
+            tags:
+              ignore: /.*/
+      - rok8s/kubernetes_e2e_tests:
+          name: "End-To-End Kubernetes 1.35"
+          kind_node_image: "kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0"
+          <<: *e2e_configuration
+      - rok8s/kubernetes_e2e_tests:
+          name: "End-To-End Kubernetes 1.36"
+          kind_node_image: "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
+          <<: *e2e_configuration
+      - rok8s/kubernetes_e2e_tests:
+          name: "End-To-End Kubernetes 1.37"
+          kind_node_image: "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
+          <<: *e2e_configuration
+  release:
+    jobs:
+      - test:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v.*/
+      - release:
+          requires:
+            - test
+          context: org-global
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v.*/
+      - oss-docs/publish-docs:
+          requires:
+            - release
+          repository: goldilocks
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v.*/
